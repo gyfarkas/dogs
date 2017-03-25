@@ -12,6 +12,7 @@ import cats.kernel.laws.{GroupLaws, OrderLaws}
 
 class ListSpec extends DogsSuite {
   import List._
+  import Option._
 
 //  implicit val xx: Eq[Int] = implicitly[Eq[Int]]
 
@@ -112,5 +113,52 @@ class ListSpec extends DogsSuite {
       xs.take(n).toScalaList should be (xs.toScalaList.take(n))
       xs.drop(n).toScalaList should be (xs.toScalaList.drop(n))
     })
+
+  @tailrec final def testSorted[A](l: List[A], last: Option[A])(implicit or: Order[A]): Boolean = l match {
+    case El() => true
+    case Nel(h,t) =>
+      if(last.cata(or.gteqv(h, _), true))
+        testSorted(t,some(h))
+      else
+        false
+  }
+
+  test("sorted")(
+    forAll { (xs: List[Int]) =>
+      testSorted(xs.sorted, none)
+    }
+  )
+
+  test("sortBy")(
+    forAll { (xs: List[String]) =>
+      testSorted(xs.sortBy(_.length), none)
+    }
+  )
+
+  test("min")(
+    forAll { (xs: Nel[Int]) =>
+      xs.min should be (xs.sorted1.head)
+    }
+  )
+
+  test("minBy")(
+    forAll { xs: Nel[String] =>
+      xs.minBy(_.length).toScalaList should contain theSameElementsAs
+        (xs.sortBy1(_.length).takeWhile(_.length == xs.sortBy1(_.length).head.length).toScalaList)
+    }
+  )
+
+  test("max")(
+    forAll { (xs: Nel[Int]) =>
+      xs.max should be (xs.sorted1.last)
+    }
+  )
+
+  test("maxBy")(
+    forAll { (xs: Nel[String]) =>
+      xs.maxBy(_.length).toScalaList should contain theSameElementsAs
+        (xs.sortBy1(_.length).dropWhile(_.length != xs.sortBy1(_.length).last.length).toScalaList)
+    }
+  )
 
 }

@@ -11,10 +11,10 @@ import cats.laws.discipline._
 class MapSpec extends DogsSuite with ArbitraryList {
   import scala.collection.immutable.{Set => SSet, Map => MMap}
 
-  def fromSet[K: Order,V](s: SSet[(K,V)]): Map[K,V] = 
+  def fromSet[K: Order,V](s: SSet[(K,V)]): Map[K,V] =
     s.foldLeft[Map[K,V]](Map.empty)(_ + _)
 
-  def fromSetS[K: Order,V](s: SSet[(K,V)]): MMap[K,V] = 
+  def fromSetS[K: Order,V](s: SSet[(K,V)]): MMap[K,V] =
     s.foldLeft[MMap[K,V]](MMap.empty)(_ + _)
 
   def toSet[K: Order,V](m: Map[K,V]): SSet[(K,V)] =

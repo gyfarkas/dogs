@@ -5,6 +5,7 @@ import scala.{inline,Iterable}
 import java.lang.{String,StringBuilder}
 import scala.annotation.{tailrec}
 import cats._
+import cats.kernel.Comparison
 
 /**
  * Immutable, singly-linked list implementation.
@@ -24,7 +25,7 @@ import cats._
  * (Every List[A] is either a Nel[A] or an El[A].)
  *
  * While it does not provide every single Scala collection method, it
- * provides a decent number of them. 
+ * provides a decent number of them.
  */
 sealed abstract class List[A] {
 
@@ -44,7 +45,7 @@ sealed abstract class List[A] {
     new Nel(a, this)
 
   /**
-   * A left-associated fold of the List, which accumuates a B value by
+   * A left-associated fold of the List, which accumulates a B value by
    * passing each element of the List to the given accumulating
    * function.
    * O(n)
@@ -59,18 +60,18 @@ sealed abstract class List[A] {
   /**
    * A right-associative fold on the list which evaluates the tail of
    * the list lazily, allowing this computation to terminate before
-   * evailuating all of the elements on the list
+   * evaluating all of the elements on the list
    * O(n)
    */
   final def foldRight[B](b: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] = this match {
-    case Nel(head, tail) => 
+    case Nel(head, tail) =>
       f(head, Eval.defer(tail.foldRight(b)(f)))
     case _ => b
   }
 
 
   /**
-   * Execute the side-effecting function on each memeber of the list, in order
+   * Execute the side-effecting function on each member of the list, in order
    */
   def foreach(f: A => Unit): Unit = this match {
     case h Nel t =>
@@ -97,7 +98,7 @@ sealed abstract class List[A] {
 
 
   /**
-   * Append a list to this list. 
+   * Append a list to this list.
    * O(n) on the size of this list
    */
   def :::(as: List[A]): List[A] = this match {
@@ -106,7 +107,7 @@ sealed abstract class List[A] {
   }
 
   /**
-   * Append a list to this list. 
+   * Append a list to this list.
    * O(n) on the size of this list
    */
   def :::(as: Nel[A]): Nel[A] = this match {
@@ -115,7 +116,7 @@ sealed abstract class List[A] {
   }
 
   /**
-   * Append a list to this list. 
+   * Append a list to this list.
    * O(n) on the size of this list
    */
   def ++(as: List[A]): List[A] = this match {
@@ -125,7 +126,7 @@ sealed abstract class List[A] {
 
   /**
    * Apply a function to each element of this list, producing a new
-   * list with the results.  
+   * list with the results.
    * O(n)
    */
   def map[B](f: A => B): List[B] = {
@@ -151,7 +152,7 @@ sealed abstract class List[A] {
    * O(n)
    */
   final def flatMap[B](f: A => List[B]): List[B] = {
-    val lb = new ListBuilder[B] 
+    val lb = new ListBuilder[B]
 
     @tailrec def go(l: List[A]): Unit = {
       l match {
@@ -167,7 +168,7 @@ sealed abstract class List[A] {
   }
 
   /**
-   * Apply a function extracting a B from every sublist, accumuating
+   * Apply a function extracting a B from every sub-list, accumulating
    * all the Bs into a List
    * O(n)
    */
@@ -242,6 +243,22 @@ sealed abstract class List[A] {
   def reverse: List[A] = foldLeft[List[A]](List.empty)((l,a) => a :: l)
 
   /**
+    * Return a List which contains all of the same elements as this List,
+    * but in order of smallest to largest according to the implicit `Order`
+    */
+  def sorted(implicit ord: Order[A]): List[A] = 
+    List.fromIterable(toScalaList.sorted(ord.toOrdering))
+
+  /**
+    * Return a List which contains all of the same elements as this List,
+    * but in order of smallest to largest according to the implicit `Order`
+    * of the type that is being mapped to
+    */
+  def sortBy[B](f: A => B)(implicit ord: Order[B]): List[A] =
+    toNel.cata(_.sortBy1(f), List.empty)
+
+
+  /**
    * Returns a List containing the first n elements of this List, if n
    * < the length of this list, the result will be a copy of this
    * list.
@@ -280,8 +297,8 @@ sealed abstract class List[A] {
   }
 
   /**
-   * Returns a List containing the first n elements of this List, 
-   * if n * < the length of this list, the result will be a copy 
+   * Returns a List containing the first n elements of this List,
+   * if n * < the length of this list, the result will be a copy
    * of this list.
    * O(num)
    */
@@ -302,7 +319,7 @@ sealed abstract class List[A] {
 
   /**
    * Returns a list of (A,B) pairs. If one list is longer than the
-   * other, the reminaing elements are ignored
+   * other, the remaining elements are ignored.
    */
   final def zip[B](bs: List[B]): List[(A,B)] = {
     val lb = new ListBuilder[(A,B)]
@@ -318,7 +335,7 @@ sealed abstract class List[A] {
 
   /**
    * Returns a list of (A,Int) where each A is paired with its
-   * zero-based index in the list
+   * zero-based index in the list.
    */
   final def zipWithIndex: List[(A,Int)] = {
     val lb = new ListBuilder[(A,Int)]
@@ -352,10 +369,10 @@ sealed abstract class List[A] {
 
   /**
    * Returns a stream of Lists. the first list is this, and the rest of
-   * the stream are the lists generated by subsequently calilng
+   * the stream are the lists generated by subsequently calling
    * tailOption as long as the list is non-empty.
    */
-  final def tails: Streaming[List[A]] = 
+  final def tails: Streaming[List[A]] =
     Streaming(this) ++ Streaming.unfold(tailOption)(_.tailOption)
 
 
@@ -380,6 +397,8 @@ sealed abstract class List[A] {
 
 final case class Nel[A](head: A, private[dogs] var _tail: List[A]) extends List[A] {
   def tail = _tail
+
+  def last: A = tail.toNel.cata(_.last, head)
 
   override final def isEmpty: Boolean = false
 
@@ -426,6 +445,55 @@ final case class Nel[A](head: A, private[dogs] var _tail: List[A]) extends List[
     loop(n, this)
     lb.run
   }
+
+  /**
+    * Return a List which contains all of the same elements as this List,
+    * but in order of smallest to largest according to the implicit `Order`
+    */
+  def sorted1(implicit ord: Order[A]): Nel[A] = {
+    val sorted = toScalaList.sorted(ord.toOrdering)
+    Nel(sorted.head, List.fromIterable(sorted.tail))
+  }
+
+  /**
+    * Return a List which contains all of the same elements as this List,
+    * but in order of smallest to largest according to the implicit `Order`
+    * of the type that is being mapped to
+    */
+  def sortBy1[B](f: A => B)(implicit ord: Order[B]): Nel[A] = {
+    val sorted = toScalaList.sortBy(f)(ord.toOrdering)
+    Nel(sorted.head, List.fromIterable(sorted.tail))
+  }
+
+  final def max(implicit ord: Order[A]): A =
+    maxBy(identity).head
+
+  final def maxBy[B](f: A => B)(implicit ord: Order[B]): Nel[A] =
+    tail match {
+      case El()        => Nel(head, List.empty)
+      case nel: Nel[_] =>
+        val maxOfTail = nel.maxBy(f)
+        ord.comparison(f(head), f(maxOfTail.head)) match {
+          case Comparison.LessThan    => maxOfTail
+          case Comparison.EqualTo     => Nel(head, maxOfTail)
+          case Comparison.GreaterThan => Nel(head, List.empty)
+        }
+    }
+
+  final def min(implicit ord: Order[A]): A =
+    minBy(identity).head
+
+  final def minBy[B](f: A => B)(implicit ord: Order[B]): Nel[A] =
+    tail match {
+      case El()        => Nel(head, List.empty)
+      case nel: Nel[_] =>
+        val minOfTail = nel.minBy(f)
+        ord.comparison(f(head), f(minOfTail.head)) match {
+          case Comparison.GreaterThan => minOfTail
+          case Comparison.EqualTo     => Nel(head, minOfTail)
+          case Comparison.LessThan    => Nel(head, List.empty)
+        }
+    }
 }
 
 final case object El extends List[Nothing] {
@@ -533,7 +601,7 @@ sealed trait ListInstances extends ListInstances1 {
       override def isEmpty[A](fa: List[A]): Boolean = fa.isEmpty
 
 
-// not until we have cats without streaming      
+// not until we have cats without streaming
 //      override def toStreaming[A](fa: List[A]): Streaming[A] =
 //        Streaming.fromList(fa)
 //
